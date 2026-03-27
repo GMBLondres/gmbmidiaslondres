@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calendário de Mídias Sociais — GMB</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;background:#f4f4f8;color:#222;padding:1.5rem}
+.app{max-width:1100px;margin:0 auto}
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:10px}
+.header h1{font-size:20px;font-weight:500;color:#222}
+.header p{font-size:13px;color:#666;margin-top:2px}
+.controls{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+select,input[type=text],input[type=date],input[type=email]{height:34px;padding:0 10px;border:1px solid #ccc;border-radius:8px;background:#fff;color:#222;font-size:13px;font-family:Arial,sans-serif}
+button{height:34px;padding:0 12px;border:1px solid #ccc;border-radius:8px;background:#fff;color:#222;font-size:13px;cursor:pointer;font-family:Arial,sans-serif;white-space:nowrap}
+button:hover{background:#f0f0f0}
+button.primary{background:#534AB7;border-color:#534AB7;color:#fff}
+button.primary:hover{background:#3C3489}
+button.success{background:#3B6D11;border-color:#3B6D11;color:#EAF3DE}
+.nav-btn{width:32px;height:32px;padding:0;display:flex;align-items:center;justify-content:center;font-size:16px}
+.tabs{display:flex;gap:4px;margin-bottom:1rem;flex-wrap:wrap}
+.tab{padding:5px 12px;border-radius:8px;font-size:12px;cursor:pointer;border:1px solid #ddd;background:#efefef;color:#666}
+.tab.active{background:#534AB7;border-color:#534AB7;color:#fff;font-weight:500}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin-bottom:1.25rem}
+.stat{background:#efefef;border-radius:8px;padding:10px;text-align:center}
+.stat-num{font-size:20px;font-weight:500}
+.stat-label{font-size:10px;color:#666;margin-top:2px}
+.calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.day-header{text-align:center;font-size:11px;color:#666;padding:6px 2px;font-weight:500}
+.day-cell{min-height:88px;border-radius:8px;border:1px solid #ddd;padding:5px;cursor:pointer;background:#fff;position:relative}
+.day-cell:hover{border-color:#534AB7}
+.day-cell.other-month{opacity:0.3;cursor:default}
+.day-cell.other-month:hover{border-color:#ddd}
+.day-cell.today{border-color:#534AB7;border-width:2px}
+.day-num{font-size:11px;font-weight:500;color:#888;margin-bottom:3px}
+.day-num.today-num{color:#534AB7;font-weight:700}
+.post-chip{font-size:9px;padding:1px 4px;border-radius:3px;display:flex;align-items:center;gap:2px;margin-bottom:2px;overflow:hidden}
+.chip-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.chip-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.holiday-label{font-size:8px;padding:1px 3px;border-radius:2px;background:#FAEEDA;color:#854F0B;margin-bottom:2px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.avail-dot{position:absolute;bottom:3px;right:4px;width:7px;height:7px;border-radius:50%}
+.legend{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+.legend-item{display:flex;align-items:center;gap:4px;font-size:11px;color:#666}
+.leg-dot{width:7px;height:7px;border-radius:50%}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:100}
+.modal{background:#fff;border-radius:12px;border:1px solid #ccc;padding:1.25rem;width:min(580px,96vw);max-height:90vh;overflow-y:auto}
+.modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem}
+.modal-title{font-size:16px;font-weight:500;color:#222}
+.close-btn{background:none;border:none;font-size:20px;cursor:pointer;color:#888}
+.field-group{margin-bottom:11px}
+.field-label{font-size:12px;color:#666;margin-bottom:4px;display:block}
+.field-input{width:100%;padding:7px 10px;border:1px solid #ccc;border-radius:8px;background:#fff;color:#222;font-size:13px;font-family:Arial,sans-serif}
+.field-input:focus{outline:none;border-color:#534AB7}
+textarea.field-input{resize:vertical;min-height:52px}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.badge-group{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px}
+.dept-badge{padding:3px 9px;border-radius:8px;font-size:11px;cursor:pointer;border:1px solid transparent;user-select:none}
+.period-options{display:flex;gap:7px;flex-wrap:wrap;margin-top:4px}
+.period-opt{display:flex;align-items:center;gap:5px;padding:5px 11px;border-radius:8px;border:1px solid #ccc;cursor:pointer;font-size:12px;user-select:none;background:#fff;color:#222}
+.period-opt.selected{border-width:2px;font-weight:500}
+.period-opt.manha.selected{background:#FAEEDA;border-color:#EF9F27;color:#412402}
+.period-opt.tarde.selected{background:#E6F1FB;border-color:#378ADD;color:#042C53}
+.period-opt.noite.selected{background:#EEEDFE;border-color:#534AB7;color:#26215C}
+.platform-opts{display:flex;gap:7px;flex-wrap:wrap;margin-top:4px}
+.plat-opt{display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;border:1px solid #ccc;cursor:pointer;font-size:12px;user-select:none;background:#fff;color:#222}
+.plat-opt.selected{border-width:2px;font-weight:500}
+.plat-opt.instagram.selected{background:#FBEAF0;border-color:#D4537E;color:#4B1528}
+.plat-opt.linkedin.selected{background:#E6F1FB;border-color:#185FA5;color:#042C53}
+.plat-opt.humand.selected{background:#EAF3DE;border-color:#3B6D11;color:#173404}
+.plat-chips{display:flex;gap:3px;flex-wrap:wrap;margin-top:3px}
+.plat-chip{font-size:9px;padding:1px 5px;border-radius:3px;font-weight:500}
+.divider{height:1px;background:#eee;margin:12px 0}
+.post-card{background:#f5f5f5;border-radius:8px;padding:12px;margin-bottom:10px;border-left:3px solid #ccc}
+.post-card-title{font-size:14px;font-weight:500;color:#222}
+.post-card-meta{font-size:11px;color:#666;margin-top:3px}
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:8px;font-size:11px;font-weight:500;white-space:nowrap}
+.s-rascunho{background:#F1EFE8;color:#5F5E5A}
+.s-aguardando{background:#FAEEDA;color:#854F0B}
+.s-revisao{background:#E6F1FB;color:#185FA5}
+.s-aprovado{background:#EAF3DE;color:#3B6D11}
+.s-publicado{background:#EEEDFE;color:#3C3489}
+.s-cancelado{background:#FCEBEB;color:#A32D2D}
+.flow-bar{display:flex;gap:3px;margin:8px 0;flex-wrap:wrap}
+.flow-step{flex:1;min-width:65px;text-align:center;padding:4px 3px;border-radius:8px;font-size:10px;border:1px solid #ddd;color:#888;background:#fff}
+.flow-step.current{border-width:2px;font-weight:500}
+.approval-box{background:#fff;border:1px solid #eee;border-radius:8px;padding:12px;margin-top:8px}
+.apv-step{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #eee}
+.apv-step:last-child{margin-bottom:0;padding-bottom:0;border-bottom:none}
+.apv-check-wrap input[type=checkbox]{width:16px;height:16px;cursor:pointer;accent-color:#534AB7;margin-top:2px}
+.apv-step-label{font-size:12px;font-weight:500;color:#222;margin-bottom:5px}
+.apv-fields{display:flex;gap:6px;flex-wrap:wrap;flex:1}
+.apv-input{flex:1;min-width:110px;padding:5px 8px;border:1px solid #ccc;border-radius:8px;background:#fff;color:#222;font-size:12px;font-family:Arial,sans-serif;height:30px}
+.apv-input:focus{outline:none;border-color:#534AB7}
+.apv-input:disabled,.apv-obs:disabled{opacity:0.4;cursor:not-allowed;background:#f5f5f5}
+.apv-obs{width:100%;padding:5px 8px;border:1px solid #ccc;border-radius:8px;background:#fff;color:#222;font-size:12px;font-family:Arial,sans-serif;resize:vertical;min-height:38px;margin-top:5px}
+.apv-obs:focus{outline:none;border-color:#534AB7}
+.edit-section{background:#fff;border:1px solid #eee;border-radius:8px;padding:12px;margin-top:8px;display:none}
+.settings-panel{background:#f5f5f5;border-radius:12px;border:1px solid #ddd;padding:1.25rem;margin-bottom:1.25rem}
+.settings-tabs{display:flex;gap:6px;margin-bottom:1rem;border-bottom:1px solid #ddd;padding-bottom:10px}
+.stab{padding:4px 12px;border-radius:8px;font-size:12px;cursor:pointer;border:1px solid transparent;color:#666}
+.stab.active{background:#534AB7;border-color:#534AB7;color:#fff;font-weight:500}
+.dept-manager{display:flex;flex-direction:column;gap:8px}
+.dept-row{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#fff;border-radius:8px;border:1px solid #eee}
+.dept-swatch{width:14px;height:14px;border-radius:3px;flex-shrink:0}
+.dept-row-name{flex:1;font-size:13px;font-weight:500;color:#222}
+.dept-row-meta{font-size:11px;color:#666}
+.add-dept-form{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;padding:10px;background:#fff;border-radius:8px;border:1px dashed #ccc}
+.color-input{width:44px;height:34px;padding:2px;border:1px solid #ccc;border-radius:8px;cursor:pointer;background:none}
+.delete-btn{background:none;border:none;color:#888;cursor:pointer;padding:2px 5px;font-size:13px}
+.delete-btn:hover{color:#E24B4A}
+.toast{position:fixed;bottom:1.5rem;right:1.5rem;background:#3B6D11;color:#EAF3DE;padding:10px 18px;border-radius:8px;font-size:13px;z-index:9999;opacity:0;transition:opacity 0.3s;pointer-events:none}
+.toast.show{opacity:1}
+.sync-indicator{display:flex;align-items:center;gap:6px;font-size:11px;color:#666;padding:4px 10px;border-radius:8px;background:#f0f0f0}
+.sync-dot{width:8px;height:8px;border-radius:50%;background:#639922}
+.sync-dot.syncing{background:#EF9F27;animation:pulse 1s infinite}
+.sync-dot.error{background:#E24B4A}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+.loading-overlay{position:fixed;inset:0;background:rgba(255,255,255,0.85);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:200;gap:12px}
+.spinner{width:36px;height:36px;border:3px solid #eee;border-top-color:#534AB7;border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media print{.no-print{display:none!important}body{background:#fff;padding:0}.app{padding:0.5rem}.day-cell{min-height:65px}.modal-overlay{display:none!important}}
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div style="font-size:13px;color:#666">Conectando ao banco de dados...</div>
+</div>
+
+<div class="app">
+  <div class="header">
+    <div>
+      <h1>Calendário de Mídias Sociais — GMB</h1>
+      <p>Gestão e aprovação de postagens por departamento — 2026</p>
+    </div>
+    <div class="controls">
+      <div class="sync-indicator no-print">
+        <div class="sync-dot" id="syncDot"></div>
+        <span id="syncLabel">Conectado</span>
+      </div>
+      <button class="nav-btn no-print" id="prevMonth">&#8592;</button>
+      <span id="monthLabel" style="font-size:14px;font-weight:500;min-width:130px;text-align:center;color:#222"></span>
+      <button class="nav-btn no-print" id="nextMonth">&#8594;</button>
+      <div style="display:flex;gap:6px;flex-wrap:wrap" class="no-print">
+        <button class="primary" id="addPostBtn">+ Nova postagem</button>
+        <button id="exportXlsBtn">&#128190; Excel</button>
+        <button id="printBtn">&#128438; Imprimir</button>
+        <button id="settingsBtn">&#9881; Config.</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="settingsPanel" style="display:none" class="settings-panel no-print">
+    <div class="settings-tabs">
+      <div class="stab active" data-stab="email">&#9993; E-mail</div>
+      <div class="stab" data-stab="depts">&#127970; Departamentos</div>
+    </div>
+    <div id="stab-email">
+      <p style="font-size:12px;color:#666;margin-bottom:10px">Ao adicionar um novo post, um rascunho de e-mail será aberto para o endereço cadastrado.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input type="email" id="notifEmail" placeholder="email@comunicacao.com.br" style="flex:1;min-width:200px"/>
+        <button class="primary" id="saveEmail">Salvar</button>
+        <button id="testEmail">Testar</button>
+      </div>
+      <div id="emailSaved" style="font-size:11px;color:#3B6D11;margin-top:6px;display:none">&#10003; E-mail salvo!</div>
+    </div>
+    <div id="stab-depts" style="display:none">
+      <div class="dept-manager" id="deptList"></div>
+      <div class="add-dept-form">
+        <input type="text" id="newDeptName" placeholder="Nome do departamento" style="flex:1;min-width:130px"/>
+        <input type="text" id="newDeptLabel" placeholder="Sigla (ex: MKT)" style="width:90px"/>
+        <input type="color" id="newDeptColor" class="color-input" value="#534AB7"/>
+        <button class="primary" id="addDeptBtn">+ Adicionar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="tabs no-print" id="deptTabs"></div>
+  <div class="stats-grid no-print" id="statsGrid"></div>
+  <div class="legend no-print">
+    <div class="legend-item"><div class="leg-dot" style="background:#888780"></div>Rascunho</div>
+    <div class="legend-item"><div class="leg-dot" style="background:#EF9F27"></div>Aguardando</div>
+    <div class="legend-item"><div class="leg-dot" style="background:#378ADD"></div>Em revisão</div>
+    <div class="legend-item"><div class="leg-dot" style="background:#639922"></div>Aprovado</div>
+    <div class="legend-item"><div class="leg-dot" style="background:#534AB7"></div>Publicado</div>
+    <span style="width:1px;height:12px;background:#ddd;display:inline-block;margin:0 4px"></span>
+    <div class="legend-item"><span style="font-size:11px">📸</span>Instagram</div>
+    <div class="legend-item"><span style="font-size:11px">💼</span>LinkedIn</div>
+    <div class="legend-item"><span style="font-size:11px">🤝</span>Humand</div>
+  </div>
+  <div class="calendar-grid" id="calendarGrid"></div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="modalTitle"></span>
+      <button class="close-btn" id="closeModal">×</button>
+    </div>
+    <div id="modalContent"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── FIREBASE CONFIG ───────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyAHaVavaa8YAhXP6lQ6xtSBXv7pyNdxjOs",
+  authDomain: "gmb-calendario-midias.firebaseapp.com",
+  projectId: "gmb-calendario-midias",
+  storageBucket: "gmb-calendario-midias.firebasestorage.app",
+  messagingSenderId: "648432868081",
+  appId: "1:648432868081:web:9e152bf81f64987a902750"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// ─── CONSTANTES ────────────────────────────────────────────────────
+const DEFAULT_DEPTS=[
+  {id:'COMMS',label:'COMMS',color:'#534AB7',bg:'#EEEDFE',text:'#26215C',builtin:true},
+  {id:'DM',label:'DM',color:'#D85A30',bg:'#FAECE7',text:'#4A1B0C',builtin:true},
+  {id:'EMP',label:'EMP',color:'#185FA5',bg:'#E6F1FB',text:'#042C53',builtin:true},
+  {id:'SUST',label:'SUST',color:'#3B6D11',bg:'#EAF3DE',text:'#173404',builtin:true},
+  {id:'MAT',label:'MAT',color:'#854F0B',bg:'#FAEEDA',text:'#412402',builtin:true},
+  {id:'CULT',label:'CULT',color:'#993556',bg:'#FBEAF0',text:'#4B1528',builtin:true},
+  {id:'D&I',label:'D&I',color:'#0F6E56',bg:'#E1F5EE',text:'#04342C',builtin:true},
+  {id:'BV',label:'BV',color:'#888780',bg:'#F1EFE8',text:'#2C2C2A',builtin:true}
+];
+const PLATFORMS=[
+  {id:'instagram',label:'Instagram',icon:'📸',selBg:'#FBEAF0',selBorder:'#D4537E',selText:'#4B1528'},
+  {id:'linkedin',label:'LinkedIn',icon:'💼',selBg:'#E6F1FB',selBorder:'#185FA5',selText:'#042C53'},
+  {id:'humand',label:'Humand',icon:'🤝',selBg:'#EAF3DE',selBorder:'#3B6D11',selText:'#173404'}
+];
+const PLAT_MAP={};PLATFORMS.forEach(p=>PLAT_MAP[p.id]=p);
+const FORMATOS=['Post','Story','Reels','Carrossel','Live','Vídeo','Texto'];
+const PERIODS=[
+  {id:'manha',label:'Manhã',color:'#EF9F27'},{id:'tarde',label:'Tarde',color:'#378ADD'},{id:'noite',label:'Noite',color:'#534AB7'}
+];
+const PERIOD_MAP={};PERIODS.forEach(p=>PERIOD_MAP[p.id]=p);
+const STATUS_FLOW=[
+  {id:'rascunho',label:'Rascunho',cls:'s-rascunho',color:'#888780',dot:'#B4B2A9'},
+  {id:'aguardando',label:'Aguard. revisão',cls:'s-aguardando',color:'#EF9F27',dot:'#EF9F27'},
+  {id:'revisao',label:'Em revisão',cls:'s-revisao',color:'#185FA5',dot:'#378ADD'},
+  {id:'aprovado',label:'Aprovado',cls:'s-aprovado',color:'#3B6D11',dot:'#639922'},
+  {id:'publicado',label:'Publicado',cls:'s-publicado',color:'#534AB7',dot:'#534AB7'},
+  {id:'cancelado',label:'Cancelado',cls:'s-cancelado',color:'#A32D2D',dot:'#E24B4A'}
+];
+const STATUS_MAP={};STATUS_FLOW.forEach(s=>STATUS_MAP[s.id]=s);
+const DATAS={'2026-01-01':'Ano Novo','2026-01-08':'#JaneiroBranco','2026-02-04':'Dia Mundial do Câncer','2026-02-14':'Dia dos Namorados','2026-03-08':'Dia da Mulher','2026-03-21':'Dia contra Discriminação Racial','2026-04-07':'Dia Mundial da Saúde','2026-04-22':'Dia da Terra','2026-05-01':'Dia do Trabalho','2026-05-10':'Dia das Mães','2026-06-05':'Dia do Meio Ambiente','2026-06-21':'Dia do Orgulho LGBTQ+','2026-08-09':'Dia dos Povos Indígenas','2026-09-07':'Independência do Brasil','2026-10-05':'Dia dos Professores','2026-10-10':'Saúde Mental','2026-10-12':'N. Sra. Aparecida','2026-11-02':'Finados','2026-11-15':'Proclamação da República','2026-11-20':'Consciência Negra','2026-12-01':'Dia da Luta contra AIDS','2026-12-03':'Dia da Pessoa com Deficiência','2026-12-25':'Natal'};
+
+// ─── STATE ─────────────────────────────────────────────────────────
+let posts=[];
+let depts=[...DEFAULT_DEPTS];
+let notifEmail=localStorage.getItem('notifEmail')||'';
+let currentYear=2026,currentMonth=new Date().getMonth(),selectedDept='all';
+const MAX_DAILY=3;
+
+const hexToLight=hex=>{const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return`rgba(${r},${g},${b},0.12)`};
+const hexToDark=hex=>{const r=Math.max(0,parseInt(hex.slice(1,3),16)-80),g=Math.max(0,parseInt(hex.slice(3,5),16)-80),b=Math.max(0,parseInt(hex.slice(5,7),16)-80);return`#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`};
+const getDeptMap=()=>{const m={};depts.forEach(d=>m[d.id]=d);return m};
+const toKey=d=>{const dt=new Date(d);return`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`};
+const todayKey=()=>toKey(new Date());
+const months=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const weekDays=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+const getDayPosts=(key,dept='all')=>posts.filter(p=>{const same=toKey(p.date)===key;return dept==='all'?same:(same&&p.departments.includes(dept))});
+
+// ─── SYNC UI ───────────────────────────────────────────────────────
+const setSyncing=()=>{document.getElementById('syncDot').className='sync-dot syncing';document.getElementById('syncLabel').textContent='Sincronizando...'};
+const setSynced=()=>{document.getElementById('syncDot').className='sync-dot';document.getElementById('syncLabel').textContent='Conectado'};
+const setSyncError=()=>{document.getElementById('syncDot').className='sync-dot error';document.getElementById('syncLabel').textContent='Erro de conexão'};
+
+// ─── FIRESTORE OPERATIONS ──────────────────────────────────────────
+const savePost=async(post)=>{
+  setSyncing();
+  try{await db.collection('posts').doc(post.id).set(post);setSynced();}
+  catch(e){setSyncError();showToast('Erro ao salvar. Verifique a conexão.','#A32D2D');}
+};
+const deletePost=async(id)=>{
+  setSyncing();
+  try{await db.collection('posts').doc(id).delete();setSynced();}
+  catch(e){setSyncError();showToast('Erro ao excluir.','#A32D2D');}
+};
+const saveDeptsToDB=async()=>{
+  try{await db.collection('config').doc('depts').set({list:depts});}
+  catch(e){console.error('Erro ao salvar departamentos',e);}
+};
+const saveEmailToDB=async(email)=>{
+  try{await db.collection('config').doc('settings').set({notifEmail:email});}
+  catch(e){}
+};
+
+// ─── REALTIME LISTENERS ────────────────────────────────────────────
+const startListeners=()=>{
+  // Posts em tempo real
+  db.collection('posts').onSnapshot(snap=>{
+    posts=snap.docs.map(d=>({...d.data(),id:d.id}));
+    refresh();
+    document.getElementById('loadingOverlay').style.display='none';
+    setSynced();
+  },err=>{
+    setSyncError();
+    document.getElementById('loadingOverlay').style.display='none';
+    showToast('Erro ao carregar dados. Verifique a conexão.','#A32D2D');
+  });
+
+  // Departamentos em tempo real
+  db.collection('config').doc('depts').onSnapshot(snap=>{
+    if(snap.exists&&snap.data().list){
+      depts=snap.data().list;
+      renderDeptTabs();
+    }
+  });
+
+  // Configurações em tempo real
+  db.collection('config').doc('settings').onSnapshot(snap=>{
+    if(snap.exists&&snap.data().notifEmail){
+      notifEmail=snap.data().notifEmail;
+      const el=document.getElementById('notifEmail');
+      if(el)el.value=notifEmail;
+    }
+  });
+};
+
+// ─── TOAST ─────────────────────────────────────────────────────────
+const showToast=(msg,color='#3B6D11')=>{
+  const t=document.getElementById('toast');t.textContent=msg;t.style.background=color;t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3000);
+};
+
+// ─── EMAIL ─────────────────────────────────────────────────────────
+const openEmailDraft=p=>{
+  if(!notifEmail){showToast('Configure o e-mail em ⚙ Config.','#854F0B');return}
+  const per=PERIOD_MAP[p.period];const dt=new Date(p.date+'T00:00:00');
+  const dateStr=`${dt.getDate()} de ${months[dt.getMonth()]} de ${dt.getFullYear()}`;
+  const plats=(p.platforms||[]).map(pid=>PLAT_MAP[pid]?.label).filter(Boolean).join(', ')||'—';
+  const subject=encodeURIComponent(`[Novo Post] ${p.title} — ${dateStr}`);
+  const body=encodeURIComponent(`Olá, equipe de Comunicação!\n\nUm novo post foi adicionado ao calendário e aguarda revisão.\n\n📌 DETALHES DO POST\n${'─'.repeat(30)}\nTítulo: ${p.title}\nData: ${dateStr}\nPeríodo: ${per?per.label:'—'}\nPlataformas: ${plats}\nDepartamento(s): ${p.departments.join(', ')}\nFormato: ${p.formato||'—'}\nResponsável: ${p.responsavel||'—'}\nStatus: ${STATUS_MAP[p.status]?.label||'—'}\n\n📝 CONTEÚDO\n${p.content||'(sem descrição)'}\n${'─'.repeat(30)}\nAcesse o calendário para revisar e aprovar.\n\nAtenciosamente,\nCalendário GMB`);
+  window.open(`mailto:${notifEmail}?subject=${subject}&body=${body}`);
+};
+
+const computeStatus=p=>{
+  if(p.status==='publicado'||p.status==='cancelado')return p.status;
+  const ap=p.approval||{};
+  if(ap.criacao?.done&&ap.revisao_gestor?.done&&ap.aprovacao_comms?.done)return'aprovado';
+  if(ap.revisao_gestor?.done)return'revisao';
+  if(ap.criacao?.done)return'aguardando';
+  return'rascunho';
+};
+
+// ─── RENDER ────────────────────────────────────────────────────────
+const renderDeptTabs=()=>{
+  const el=document.getElementById('deptTabs');
+  el.innerHTML=`<div class="tab ${selectedDept==='all'?'active':''}" data-dept="all">Todos</div>`+depts.map(d=>`<div class="tab ${selectedDept===d.id?'active':''}" data-dept="${d.id}">${d.label}</div>`).join('');
+  el.querySelectorAll('.tab').forEach(tab=>{tab.addEventListener('click',()=>{selectedDept=tab.dataset.dept;renderDeptTabs();refresh();});});
+};
+
+const renderDeptManager=()=>{
+  const el=document.getElementById('deptList');if(!el)return;
+  el.innerHTML=depts.map(d=>`<div class="dept-row"><div class="dept-swatch" style="background:${d.color}"></div><div style="flex:1"><div class="dept-row-name">${d.label}</div><div class="dept-row-meta">${posts.filter(p=>p.departments.includes(d.id)).length} posts</div></div>${!d.builtin?`<button class="delete-btn" data-id="${d.id}">🗑</button>`:'<span style="font-size:10px;color:#888;padding:0 6px">padrão</span>'}</div>`).join('');
+  el.querySelectorAll('.delete-btn').forEach(b=>{
+    b.addEventListener('click',async()=>{
+      if(posts.some(p=>p.departments.includes(b.dataset.id))){showToast('Dept. tem posts. Remova-os antes.','#A32D2D');return}
+      if(!confirm('Remover departamento?'))return;
+      depts=depts.filter(d=>d.id!==b.dataset.id);
+      await saveDeptsToDB();renderDeptManager();renderDeptTabs();refresh();showToast('Departamento removido.');
+    });
+  });
+};
+
+const renderStats=()=>{
+  const g=document.getElementById('statsGrid');
+  const mp=posts.filter(p=>{const d=new Date(p.date);return d.getFullYear()===currentYear&&d.getMonth()===currentMonth});
+  const f=selectedDept==='all'?mp:mp.filter(p=>p.departments.includes(selectedDept));
+  const c={};STATUS_FLOW.forEach(s=>{c[s.id]=f.filter(p=>p.status===s.id).length});
+  g.innerHTML=`<div class="stat"><div class="stat-num">${f.length}</div><div class="stat-label">Total</div></div><div class="stat"><div class="stat-num" style="color:#888780">${c.rascunho||0}</div><div class="stat-label">Rascunho</div></div><div class="stat"><div class="stat-num" style="color:#EF9F27">${c.aguardando||0}</div><div class="stat-label">Aguardando</div></div><div class="stat"><div class="stat-num" style="color:#185FA5">${c.revisao||0}</div><div class="stat-label">Em revisão</div></div><div class="stat"><div class="stat-num" style="color:#3B6D11">${c.aprovado||0}</div><div class="stat-label">Aprovado</div></div><div class="stat"><div class="stat-num" style="color:#534AB7">${c.publicado||0}</div><div class="stat-label">Publicado</div></div>`;
+};
+
+const renderCalendar=()=>{
+  const g=document.getElementById('calendarGrid');
+  document.getElementById('monthLabel').textContent=`${months[currentMonth]} ${currentYear}`;
+  const firstDay=new Date(currentYear,currentMonth,1).getDay();
+  const daysInMonth=new Date(currentYear,currentMonth+1,0).getDate();
+  const tk=todayKey();const prevDays=new Date(currentYear,currentMonth,0).getDate();
+  const dm=getDeptMap();
+  let html=weekDays.map(d=>`<div class="day-header">${d}</div>`).join('');
+  for(let i=0;i<firstDay;i++){const d=prevDays-firstDay+1+i;html+=`<div class="day-cell other-month"><div class="day-num">${d}</div></div>`;}
+  for(let d=1;d<=daysInMonth;d++){
+    const key=`${currentYear}-${String(currentMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dp=getDayPosts(key,selectedDept);const ap=getDayPosts(key,'all');
+    const isToday=key===tk;const holiday=DATAS[key];const count=ap.length;
+    const availColor=count===0?'#63992288':count<MAX_DAILY?'#EF9F2788':'#E24B4A88';
+    const chips=dp.slice(0,3).map(p=>{const dept=dm[p.departments[0]]||depts[0];const st=STATUS_MAP[p.status]||STATUS_MAP['rascunho'];return`<div class="post-chip" style="background:${dept.bg||hexToLight(dept.color)};color:${dept.text||hexToDark(dept.color)}"><div class="chip-dot" style="background:${st.dot}"></div><span class="chip-label">${p.title.substring(0,11)}</span></div>`;}).join('');
+    html+=`<div class="day-cell${isToday?' today':''}" data-key="${key}" data-d="${d}"><div class="day-num ${isToday?'today-num':''}">${d}</div>${holiday?`<div class="holiday-label">${holiday}</div>`:''}${chips}<div class="avail-dot" style="background:${availColor}"></div></div>`;
+  }
+  const trailing=7-((firstDay+daysInMonth)%7||7);
+  if(trailing<7)for(let d=1;d<=trailing;d++)html+=`<div class="day-cell other-month"><div class="day-num">${d}</div></div>`;
+  g.innerHTML=html;
+  g.querySelectorAll('.day-cell:not(.other-month)').forEach(c=>{c.addEventListener('click',()=>openDayModal(c.dataset.key,parseInt(c.dataset.d)));});
+};
+
+const flowBar=st=>{
+  const main=STATUS_FLOW.filter(s=>s.id!=='cancelado');const idx=main.findIndex(x=>x.id===st);
+  const bgMap={'s-rascunho':'#F1EFE8','s-aguardando':'#FAEEDA','s-revisao':'#E6F1FB','s-aprovado':'#EAF3DE','s-publicado':'#EEEDFE'};
+  return`<div class="flow-bar">${main.map((s,i)=>{const isCurrent=i===idx,isDone=i<idx;return`<div class="flow-step${isCurrent?' current':''}${isDone?' done':''}" style="background:${isCurrent?(bgMap[s.cls]||'#f0f0f0'):'transparent'};border-color:${isCurrent?s.color:'#ddd'};color:${isCurrent?s.color:'#888'}">${isDone?'✓ ':''}${s.label}</div>`;}).join('')}</div>`;
+};
+
+const buildPlatformSelector=(sel,prefix)=>`<div class="platform-opts" id="${prefix}-plats">${PLATFORMS.map(p=>`<div class="plat-opt ${p.id}${sel.includes(p.id)?' selected':''}" data-id="${p.id}" style="${sel.includes(p.id)?`background:${p.selBg};border-color:${p.selBorder};border-width:2px;color:${p.selText};font-weight:500`:''}">${p.icon} ${p.label}</div>`).join('')}</div>`;
+const buildDeptSelector=(sel,prefix)=>`<div class="badge-group" id="${prefix}-depts">${depts.map(d=>{const s=sel.includes(d.id);const bg=d.bg||hexToLight(d.color);const txt=d.text||hexToDark(d.color);return`<div class="dept-badge" data-id="${d.id}" style="background:${bg};color:${txt};border-color:${s?d.color:bg};${s?'box-shadow:0 0 0 1px '+d.color:''}">${d.label}</div>`;}).join('')}</div>`;
+
+const bindPlatOpts=(container,prefix,arr)=>{
+  container.querySelectorAll(`#${prefix}-plats .plat-opt`).forEach(opt=>{
+    opt.addEventListener('click',()=>{const id=opt.dataset.id;const p=PLAT_MAP[id];if(arr.includes(id)){arr.splice(arr.indexOf(id),1);opt.classList.remove('selected');opt.style.cssText='';}else{arr.push(id);opt.classList.add('selected');opt.style.cssText=`background:${p.selBg};border-color:${p.selBorder};border-width:2px;color:${p.selText};font-weight:500`;}});
+  });
+};
+const bindDeptBadges=(container,prefix,arr)=>{
+  container.querySelectorAll(`#${prefix}-depts .dept-badge`).forEach(b=>{
+    b.addEventListener('click',()=>{const id=b.dataset.id;const dept=getDeptMap()[id];if(!dept)return;const bg=dept.bg||hexToLight(dept.color);if(arr.includes(id)){arr.splice(arr.indexOf(id),1);b.style.borderColor=bg;b.style.boxShadow='';}else{arr.push(id);b.style.borderColor=dept.color;b.style.boxShadow=`0 0 0 1px ${dept.color}`;}});
+  });
+};
+
+// ─── DAY MODAL ─────────────────────────────────────────────────────
+const openDayModal=(dateKey,day)=>{
+  const date=new Date(dateKey+'T00:00:00');
+  document.getElementById('modalTitle').textContent=`${day} de ${months[date.getMonth()]} ${date.getFullYear()}`;
+  const content=document.getElementById('modalContent');
+  const dm=getDeptMap();
+
+  const render=()=>{
+    const dp=getDayPosts(dateKey,'all');const holiday=DATAS[dateKey];
+    const postItems=dp.length===0?`<div style="text-align:center;padding:1.5rem;font-size:13px;color:#888">Nenhuma postagem neste dia</div>`:dp.map(p=>{
+      const dept=dm[p.departments[0]]||depts[0];const st=STATUS_MAP[p.status]||STATUS_MAP['rascunho'];const per=PERIOD_MAP[p.period];const ap=p.approval||{};
+      const platHtml=(p.platforms||[]).map(pid=>{const pl=PLAT_MAP[pid];return pl?`<span class="plat-chip" style="background:${pl.selBg};color:${pl.selText}">${pl.icon} ${pl.label}</span>`:''}).join('');
+      const apvSteps=[{key:'criacao',label:'Criação',icon:'✏️',ph:'Criado por'},{key:'revisao_gestor',label:'Revisão do Gestor',icon:'👤',ph:'Nome do gestor'},{key:'aprovacao_comms',label:'Aprovação Comunicação',icon:'✅',ph:'Nome da Comunicação'}];
+      const apvHtml=apvSteps.map(s2=>{const d2=ap[s2.key]||{};const dis=d2.done?'':'disabled';return`<div class="apv-step"><div class="apv-check-wrap"><input type="checkbox" class="apv-check" data-step="${s2.key}" data-pid="${p.id}" ${d2.done?'checked':''}/></div><div style="flex:1"><div class="apv-step-label">${s2.icon} ${s2.label}</div><div class="apv-fields"><input class="apv-input apv-nome" data-step="${s2.key}" data-pid="${p.id}" type="text" placeholder="${s2.ph}" value="${d2.nome||''}" ${dis}/><input class="apv-input apv-data" data-step="${s2.key}" data-pid="${p.id}" type="date" value="${d2.data||''}" ${dis}/></div><textarea class="apv-obs" data-step="${s2.key}" data-pid="${p.id}" placeholder="Observações..." ${dis}>${d2.obs||''}</textarea></div></div>`;}).join('');
+      return`<div class="post-card" style="border-left-color:${dept.color}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+          <div style="flex:1">
+            <div class="post-card-title">${p.title}</div>
+            <div class="post-card-meta">${p.departments.join(', ')} · ${p.formato||''} · ${per?per.label:''} ${p.responsavel?'· '+p.responsavel:''}</div>
+            ${platHtml?`<div class="plat-chips" style="margin-top:4px">${platHtml}</div>`:''}
+            ${p.content?`<div class="post-card-meta" style="margin-top:3px;font-style:italic">${p.content.substring(0,100)}</div>`:''}
+          </div>
+          <div style="display:flex;gap:4px;align-items:center;flex-shrink:0">
+            <span class="badge ${st.cls}">${st.label}</span>
+            <button class="delete-btn" data-id="${p.id}">🗑</button>
+          </div>
+        </div>
+        ${flowBar(p.status)}
+        <div class="edit-section" id="edit-${p.id}">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <span style="font-size:12px;font-weight:500">✏️ Editar</span>
+            <button class="toggle-edit" data-pid="${p.id}" style="font-size:11px;height:26px;padding:0 8px">Fechar</button>
+          </div>
+          <div class="field-group" style="margin-bottom:8px"><label class="field-label">Título</label><input class="field-input edit-title" data-pid="${p.id}" type="text" value="${p.title}"/></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+            <div><label class="field-label">Data</label><input class="field-input edit-date" data-pid="${p.id}" type="date" value="${p.date}"/></div>
+            <div><label class="field-label">Formato</label><select class="field-input edit-formato" data-pid="${p.id}">${FORMATOS.map(f=>`<option${f===p.formato?' selected':''}>${f}</option>`).join('')}</select></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+            <div><label class="field-label">Período</label><select class="field-input edit-period" data-pid="${p.id}">${PERIODS.map(pr=>`<option value="${pr.id}"${pr.id===p.period?' selected':''}>${pr.label}</option>`).join('')}</select></div>
+            <div><label class="field-label">Status</label><select class="field-input edit-status" data-pid="${p.id}">${STATUS_FLOW.map(s=>`<option value="${s.id}"${s.id===p.status?' selected':''}>${s.label}</option>`).join('')}</select></div>
+          </div>
+          <div class="field-group" style="margin-bottom:8px"><label class="field-label">Responsável</label><input class="field-input edit-resp" data-pid="${p.id}" type="text" value="${p.responsavel||''}"/></div>
+          <div class="field-group" style="margin-bottom:8px"><label class="field-label">Plataformas</label>${buildPlatformSelector(p.platforms||[],'ep-'+p.id)}</div>
+          <div class="field-group" style="margin-bottom:8px"><label class="field-label">Departamentos</label>${buildDeptSelector(p.departments,'ed-'+p.id)}</div>
+          <div class="field-group" style="margin-bottom:8px"><label class="field-label">Conteúdo</label><textarea class="field-input edit-content" data-pid="${p.id}">${p.content||''}</textarea></div>
+          <button class="success save-edit" data-pid="${p.id}" style="width:100%;font-size:12px;height:32px">✓ Salvar alterações</button>
+        </div>
+        <div class="approval-box">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <span style="font-size:12px;font-weight:500">Checklist de aprovação</span>
+            <div style="display:flex;gap:5px">
+              <button class="toggle-edit" data-pid="${p.id}" style="font-size:11px;height:26px;padding:0 8px">✏️ Editar</button>
+              <button class="btn-email" data-pid="${p.id}" style="font-size:11px;height:26px;padding:0 8px;background:#E6F1FB;border-color:#378ADD;color:#042C53">✉ Notificar</button>
+            </div>
+          </div>
+          ${apvHtml}
+        </div>
+      </div>`;
+    }).join('');
+
+    content.innerHTML=`
+      ${holiday?`<div style="background:#FAEEDA;color:#854F0B;border-radius:8px;padding:7px 10px;font-size:12px;margin-bottom:10px">📅 ${holiday}</div>`:''}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:500">Postagens (${dp.length}/${MAX_DAILY})</div>
+        <div style="font-size:11px;color:${dp.length<MAX_DAILY?'#3B6D11':'#A32D2D'}">${MAX_DAILY-dp.length} vagas livres</div>
+      </div>
+      ${postItems}
+      <div class="divider"></div>
+      <button class="primary" style="width:100%;margin-top:6px" id="addForDay">+ Adicionar postagem neste dia</button>`;
+
+    dp.forEach(p=>{
+      const editPlats=[...(p.platforms||[])];const editDepts=[...p.departments];
+      bindPlatOpts(content,'ep-'+p.id,editPlats);bindDeptBadges(content,'ed-'+p.id,editDepts);
+      const saveBtn=content.querySelector(`.save-edit[data-pid="${p.id}"]`);
+      if(saveBtn)saveBtn.addEventListener('click',async()=>{
+        p.title=content.querySelector(`.edit-title[data-pid="${p.id}"]`).value.trim()||p.title;
+        p.date=content.querySelector(`.edit-date[data-pid="${p.id}"]`).value||p.date;
+        p.formato=content.querySelector(`.edit-formato[data-pid="${p.id}"]`).value;
+        p.period=content.querySelector(`.edit-period[data-pid="${p.id}"]`).value;
+        p.status=content.querySelector(`.edit-status[data-pid="${p.id}"]`).value;
+        p.responsavel=content.querySelector(`.edit-resp[data-pid="${p.id}"]`).value;
+        p.content=content.querySelector(`.edit-content[data-pid="${p.id}"]`).value;
+        p.platforms=[...editPlats];if(editDepts.length>0)p.departments=[...editDepts];
+        await savePost(p);showToast('Post atualizado!');
+      });
+    });
+
+    content.querySelectorAll('.delete-btn').forEach(b=>{b.addEventListener('click',async()=>{if(!confirm('Excluir?'))return;await deletePost(b.dataset.id);render();});});
+    content.querySelectorAll('.toggle-edit').forEach(b=>{b.addEventListener('click',()=>{const el=document.getElementById('edit-'+b.dataset.pid);if(el)el.style.display=el.style.display==='none'||!el.style.display?'block':'none';});});
+    content.querySelectorAll('.btn-email').forEach(b=>{b.addEventListener('click',()=>{const post=posts.find(p=>p.id===b.dataset.pid);if(post)openEmailDraft(post);});});
+    content.querySelectorAll('.apv-check').forEach(cb=>{
+      cb.addEventListener('change',async()=>{
+        const post=posts.find(p=>p.id===cb.dataset.pid);if(!post)return;
+        if(!post.approval)post.approval={};if(!post.approval[cb.dataset.step])post.approval[cb.dataset.step]={};
+        post.approval[cb.dataset.step].done=cb.checked;
+        if(cb.checked&&!post.approval[cb.dataset.step].data)post.approval[cb.dataset.step].data=todayKey();
+        post.status=computeStatus(post);await savePost(post);render();
+      });
+    });
+    content.querySelectorAll('.apv-nome,.apv-data,.apv-obs').forEach(inp=>{
+      inp.addEventListener('blur',async()=>{
+        const post=posts.find(p=>p.id===inp.dataset.pid);if(!post||!post.approval?.[inp.dataset.step])return;
+        if(inp.classList.contains('apv-nome'))post.approval[inp.dataset.step].nome=inp.value;
+        else if(inp.classList.contains('apv-data'))post.approval[inp.dataset.step].data=inp.value;
+        else post.approval[inp.dataset.step].obs=inp.value;
+        await savePost(post);
+      });
+    });
+    content.querySelector('#addForDay')?.addEventListener('click',()=>{closeModal();openNewPostModal(dateKey);});
+  };
+  render();showModal();
+};
+
+// ─── NEW POST MODAL ─────────────────────────────────────────────────
+const openNewPostModal=(prefillDate='')=>{
+  document.getElementById('modalTitle').textContent='Nova Postagem';
+  const content=document.getElementById('modalContent');
+  const dateVal=prefillDate||`${currentYear}-${String(currentMonth+1).padStart(2,'0')}-01`;
+  let selDepts=[],selPeriod='manha',selPlats=[];
+
+  content.innerHTML=`
+    <div class="field-group"><label class="field-label">Título / Tema *</label><input class="field-input" id="f-title" placeholder="Ex: Dia Internacional da Mulher"/></div>
+    <div class="field-row">
+      <div class="field-group"><label class="field-label">Data *</label><input class="field-input" id="f-date" type="date" value="${dateVal}"/></div>
+      <div class="field-group"><label class="field-label">Formato</label><select class="field-input" id="f-formato">${FORMATOS.map(f=>`<option>${f}</option>`).join('')}</select></div>
+    </div>
+    <div class="field-group"><label class="field-label">Período *</label><div class="period-options">${PERIODS.map(p=>`<div class="period-opt ${p.id}${p.id==='manha'?' selected':''}" data-id="${p.id}"><span style="font-size:13px">${p.id==='manha'?'☀️':p.id==='tarde'?'🌤️':'🌙'}</span>${p.label}</div>`).join('')}</div></div>
+    <div class="field-group"><label class="field-label">Plataformas *</label>${buildPlatformSelector([],'np')}</div>
+    <div class="field-group"><label class="field-label">Departamentos *</label>${buildDeptSelector([],'nd')}</div>
+    <div class="field-group"><label class="field-label">Responsável pela criação</label><input class="field-input" id="f-resp" placeholder="Nome de quem está criando"/></div>
+    <div class="field-group"><label class="field-label">Conteúdo / Descrição</label><textarea class="field-input" id="f-content" placeholder="Descreva o conteúdo..."></textarea></div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button id="savePost" class="primary" style="flex:1">Salvar e notificar</button>
+      <button id="cancelPost" style="flex:1">Cancelar</button>
+    </div>`;
+
+  bindPlatOpts(content,'np',selPlats);bindDeptBadges(content,'nd',selDepts);
+  content.querySelectorAll('.period-opt').forEach(opt=>{opt.addEventListener('click',()=>{content.querySelectorAll('.period-opt').forEach(o=>o.classList.remove('selected'));opt.classList.add('selected');selPeriod=opt.dataset.id;});});
+
+  content.querySelector('#savePost').addEventListener('click',async()=>{
+    const title=document.getElementById('f-title').value.trim();const date=document.getElementById('f-date').value;
+    if(!title||!date){alert('Título e data são obrigatórios');return}
+    if(selDepts.length===0){alert('Selecione ao menos um departamento');return}
+    if(selPlats.length===0){alert('Selecione ao menos uma plataforma');return}
+    const resp=document.getElementById('f-resp').value.trim();
+    const newPost={id:Date.now().toString(),title,date,departments:[...selDepts],formato:document.getElementById('f-formato').value,status:resp?'aguardando':'rascunho',content:document.getElementById('f-content').value,responsavel:resp,period:selPeriod,platforms:[...selPlats],approval:{criacao:{done:!!resp,nome:resp,data:resp?todayKey():'',obs:''},revisao_gestor:{done:false,nome:'',data:'',obs:''},aprovacao_comms:{done:false,nome:'',data:'',obs:''}},createdAt:new Date().toISOString()};
+    await savePost(newPost);closeModal();
+    if(notifEmail){openEmailDraft(newPost);showToast('Post salvo! Abrindo rascunho de e-mail...');}
+    else showToast('Post salvo com sucesso!');
+  });
+  content.querySelector('#cancelPost').addEventListener('click',closeModal);
+  showModal();
+};
+
+// ─── EXPORT EXCEL ──────────────────────────────────────────────────
+const exportXls=()=>{
+  if(typeof XLSX==='undefined'){alert('Tente novamente.');return}
+  const wb=XLSX.utils.book_new();
+  const daysInMonth=new Date(currentYear,currentMonth+1,0).getDate();
+  const rows=[['Data','Dia','Período','Plataformas','Departamentos','Título','Formato','Status','Responsável','Conteúdo','Data Comemorativa','Criado por','Data criação','Gestor revisor','Data revisão','Obs. gestor','Aprovado (COMMS)','Data aprovação','Obs. aprovação']];
+  for(let d=1;d<=daysInMonth;d++){
+    const key=`${currentYear}-${String(currentMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dt=new Date(key+'T00:00:00');const wk=weekDays[dt.getDay()];const hl=DATAS[key]||'';
+    const dp=getDayPosts(key,'all');
+    if(!dp.length){rows.push([key,wk,'','','','','','','','',hl,'','','','','','','','']);continue;}
+    dp.forEach(p=>{
+      const ap=p.approval||{};const plats=(p.platforms||[]).map(pid=>PLAT_MAP[pid]?.label).filter(Boolean).join(', ');
+      rows.push([key,wk,PERIOD_MAP[p.period]?.label||'',plats,p.departments.join(', '),p.title,p.formato||'',STATUS_MAP[p.status]?.label||'',p.responsavel||'',p.content||'',hl,ap.criacao?.nome||'',ap.criacao?.data||'',ap.revisao_gestor?.nome||'',ap.revisao_gestor?.data||'',ap.revisao_gestor?.obs||'',ap.aprovacao_comms?.nome||'',ap.aprovacao_comms?.data||'',ap.aprovacao_comms?.obs||'']);
+    });
+  }
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=[{wch:12},{wch:8},{wch:8},{wch:24},{wch:18},{wch:28},{wch:10},{wch:14},{wch:14},{wch:28},{wch:20},{wch:14},{wch:12},{wch:14},{wch:12},{wch:20},{wch:16},{wch:12},{wch:20}];
+  XLSX.utils.book_append_sheet(wb,ws,`${months[currentMonth]} ${currentYear}`);
+  XLSX.writeFile(wb,`Calendario_GMB_${months[currentMonth]}_${currentYear}.xlsx`);
+};
+
+// ─── UI HELPERS ────────────────────────────────────────────────────
+const showModal=()=>{document.getElementById('modalOverlay').style.display='flex'};
+const closeModal=()=>{document.getElementById('modalOverlay').style.display='none'};
+const refresh=()=>{renderStats();renderCalendar()};
+
+// ─── EVENT LISTENERS ───────────────────────────────────────────────
+document.getElementById('prevMonth').addEventListener('click',()=>{currentMonth--;if(currentMonth<0){currentMonth=11;currentYear--;}refresh()});
+document.getElementById('nextMonth').addEventListener('click',()=>{currentMonth++;if(currentMonth>11){currentMonth=0;currentYear++;}refresh()});
+document.getElementById('addPostBtn').addEventListener('click',()=>openNewPostModal());
+document.getElementById('closeModal').addEventListener('click',closeModal);
+document.getElementById('modalOverlay').addEventListener('click',e=>{if(e.target===document.getElementById('modalOverlay'))closeModal()});
+document.getElementById('exportXlsBtn').addEventListener('click',exportXls);
+document.getElementById('printBtn').addEventListener('click',()=>window.print());
+
+document.getElementById('settingsBtn').addEventListener('click',()=>{
+  const panel=document.getElementById('settingsPanel');const visible=panel.style.display==='block';
+  panel.style.display=visible?'none':'block';
+  if(!visible){document.getElementById('notifEmail').value=notifEmail;renderDeptManager();}
+});
+
+document.querySelectorAll('.stab').forEach(t=>{
+  t.addEventListener('click',()=>{
+    document.querySelectorAll('.stab').forEach(s=>s.classList.remove('active'));t.classList.add('active');
+    document.getElementById('stab-email').style.display=t.dataset.stab==='email'?'block':'none';
+    document.getElementById('stab-depts').style.display=t.dataset.stab==='depts'?'block':'none';
+    if(t.dataset.stab==='depts')renderDeptManager();
+  });
+});
+
+document.getElementById('saveEmail').addEventListener('click',async()=>{
+  const val=document.getElementById('notifEmail').value.trim();
+  if(!val||!val.includes('@')){alert('E-mail inválido');return}
+  notifEmail=val;localStorage.setItem('notifEmail',val);
+  await saveEmailToDB(val);
+  document.getElementById('emailSaved').style.display='block';
+  setTimeout(()=>document.getElementById('emailSaved').style.display='none',3000);
+  showToast('E-mail salvo para toda a equipe!');
+});
+
+document.getElementById('testEmail').addEventListener('click',()=>{
+  const val=document.getElementById('notifEmail').value.trim();
+  if(!val){alert('Digite um e-mail primeiro');return}
+  notifEmail=val;
+  openEmailDraft({title:'Post de teste',date:todayKey(),departments:['COMMS'],formato:'Post',status:'aguardando',responsavel:'Teste',content:'Teste do sistema.',period:'manha',platforms:['instagram','linkedin'],approval:{criacao:{done:true,nome:'Teste',data:todayKey(),obs:''}}});
+});
+
+document.getElementById('addDeptBtn').addEventListener('click',async()=>{
+  const name=document.getElementById('newDeptName').value.trim();
+  const label=document.getElementById('newDeptLabel').value.trim()||name.substring(0,4).toUpperCase();
+  const color=document.getElementById('newDeptColor').value;
+  if(!name){alert('Digite o nome do departamento');return}
+  const id=label.toUpperCase().replace(/[^A-Z0-9]/g,'').substring(0,6);
+  if(depts.find(d=>d.id===id)){alert('Já existe um departamento com esta sigla.');return}
+  depts.push({id,label,color,bg:hexToLight(color),text:hexToDark(color),builtin:false});
+  await saveDeptsToDB();renderDeptManager();renderDeptTabs();refresh();
+  document.getElementById('newDeptName').value='';document.getElementById('newDeptLabel').value='';
+  showToast(`Departamento ${label} adicionado para toda a equipe!`);
+});
+
+// ─── INIT ──────────────────────────────────────────────────────────
+if(new Date().getFullYear()===2026)currentMonth=new Date().getMonth();
+renderDeptTabs();
+startListeners();
+</script>
+</body>
+</html>
